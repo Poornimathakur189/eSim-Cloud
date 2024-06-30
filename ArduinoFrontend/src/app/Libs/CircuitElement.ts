@@ -18,6 +18,18 @@ export abstract class CircuitElement {
    */
   public id: number;
   /**
+   * Stores the rotation angle of the Component
+   */
+  public rotation: number;
+  /**
+   * Stores the centre x coordinate of the Component
+   */
+  public cx: number;
+  /**
+   * Stores the centre y coordinate of the Component
+   */
+  public cy: number;
+  /**
    * Stores the Nodes of a Component
    */
   public nodes: Point[] = [];
@@ -41,7 +53,7 @@ export abstract class CircuitElement {
    * Store Values That are required during simulation
    */
   public simulationData: any = {};
-  /**
+ /**
    * Store Values that are additionaly require by class
    */
   public data: any = {};
@@ -70,7 +82,11 @@ export abstract class CircuitElement {
     this.keyName = keyName; // Set key name
     // Create Raphael Set
     this.elements = window['canvas'].set();
-
+    // setting rotation angle to 0
+    this.rotation = 0;
+    // setting  centre coordinates to 0
+    this.cx = 0;
+    this.cy = 0;
     // if filename is present fetch the file
     if (filename) {
 
@@ -86,13 +102,13 @@ export abstract class CircuitElement {
           this.DrawElement(canvas, obj.draw);
           // Add Circuiy Nodes
           this.DrawNodes(canvas, obj.pins, obj.pointHalf);
-        
+
           // Add info and data
           this.info = obj.info;
           this.data = obj.data;
           // Add a Drag listener
           this.setDragListeners();
-          // Add a Click Listener
+                                     // Add a Click Listener
           this.setClickListener(null);
           // Add Hover Listener
           this.setHoverListener();
@@ -142,7 +158,7 @@ export abstract class CircuitElement {
       );
     }
   }
-  /**
+ /**
    * Draw Elements inside an component
    * @param canvas Raphael Canvas
    * @param drawData Draw Data
@@ -240,27 +256,51 @@ export abstract class CircuitElement {
         stroke: item.stroke || 'none'
       });
   }
-
-  rotate(degrees: number): void { // Added this method
-    const rad = degrees * (Math.PI / 180); // Convert degrees to radians
-    const centerX = this.x + this.tx;
-    const centerY = this.y + this.ty;
-
-    this.elements.transform(`r${degrees},${centerX},${centerY}`);
-    this.updateNodePositions(rad, centerX, centerY);
-  }
-
-  
-  updateNodePositions(rad: number, centerX: number, centerY: number): void { // Added this method
-    for (const node of this.nodes) {
-      const offsetX = node.x - centerX;
-      const offsetY = node.y - centerY;
-      const rotatedX = centerX + (offsetX * Math.cos(rad) - offsetY * Math.sin(rad));
-      const rotatedY = centerY + (offsetX * Math.sin(rad) + offsetY * Math.cos(rad));
-      node.move(rotatedX, rotatedY);
+  /**
+   * Rotates Component
+   */
+  rotate(): void {
+    // Initialize the center if this is the first rotation.
+    if (this.rotation === 0) {
+      const bBox = this.elements.getBBox();
+      this.cx = this.x + bBox.width / 2;
+      this.cy = this.y + bBox.height / 2;
     }
+
+    this.rotation = this.rotation + 90;
+    this.elements.rotate(90,  this.cx, this.cy);
+    this.updateNodePositions();
   }
   /**
+   * Updates the positions of nodes after rotation
+   */
+  updateNodePositions(): void { // Added this method
+    // Compute the center of the elements based on current rotation.
+    let dx = 0, dy = 0;
+    const bBox = this.elements.getBBox();
+    if (this.rotation % 180 === 0) {
+      dx = bBox.width / 2;
+      dy = bBox.height / 2;
+    } else {
+      dx = bBox.height / 2;
+      dy = bBox.width / 2;
+    }
+    const centerX = this.x + this.tx + dx;
+    const centerY = this.y + this.ty + dy;
+
+    for (const node of this.nodes) {
+      const offsetX = centerX - node.x;
+      const offsetY = centerY - node.y;
+      const rotatedX = centerX + offsetY;
+      const rotatedY = centerY - offsetX;
+
+      // Since we always rotate 90 degrees clockwise, we need to add
+      // node rotation offset of the negative length of node to x.
+      const rotationOffset = - 2 * node.half;
+      node.move(rotatedX + rotationOffset, rotatedY);
+    }
+  }
+ /**
    * Draw path relative to the component
    * @param input Path Data
    * @param pattern The regex pattern
@@ -307,10 +347,11 @@ export abstract class CircuitElement {
     let fdy = 0;
     let tmpar = [];
     this.elements.drag((dx, dy) => {
-
+      const bBox = this.elements.getBBox();
+      const cx = this.x + bBox.height / 2;
+      const cy = this.y + bBox.width / 2 ;
       this.elements.transform(`t${this.tx + dx},${this.ty + dy}`);
-      // tmpx = this.tx + dx;
-      // tmpy = this.ty + dy;
+      this.elements.rotate( this.rotation , this.cx , this.cy );
       fdx = dx;
       fdy = dy;
       for (let i = 0; i < this.nodes.length; ++i) {
@@ -323,38 +364,67 @@ export abstract class CircuitElement {
       tmpar = [];
       for (const node of this.nodes) {
         // node.remainHidden();
-        tmpar.push(
+             tmpar.push(
+
           [node.x, node.y]
+
         );
+
       }
+
     }, () => {
+
       // for (const node of this.nodes) {
+
       //   node.relativeMove(fdx, fdy);
+
       //   node.remainShow();
+
       // }
 
       // Push dump to Undo stack & Reset
+
       UndoUtils.pushChangeToUndoAndReset({ keyName: this.keyName, element: this.save(), event: 'drag', dragJson: { dx: fdx, dy: fdy } });
+
       this.tx += fdx;
+
       this.ty += fdy;
+
       window['onDragStopEvent'](this);
+
     });
-  }
+ }
+
   /**
+
    * Add Hover Listener
+
    */
+
   setHoverListener() {
+
     // this.elements.mouseover(() => {
+
     //   for (const node of this.nodes) {
+
     //     // node.show();
+
     //   }
+
     // });
+
     // this.elements.mouseout(() => {
+
     //   for (const node of this.nodes) {
+
     //     // node.hide();
+
     //   }
+
     // });
+
   }
+
   /**
    * Add a Click listenert to component and show properties on click
    * @param callback On Click Callback
@@ -375,7 +445,7 @@ export abstract class CircuitElement {
       }
     });
   }
-  /**
+ /**
    * Initialize Variable after inheriting this function
    */
   init() { }
@@ -421,6 +491,7 @@ export abstract class CircuitElement {
       if (window['DragStopListeners'].hasOwnProperty(i)) {
         const itrFn = window['DragStopListeners'][i];
         if (itrFn.id === this.id) {
+
           window['DragStopListeners'][i].id = data.id;
         }
       }
@@ -463,6 +534,7 @@ export abstract class CircuitElement {
     }
     this.delete();
   }
+
   /**
    * Inherit this function to remove some variable
    */
@@ -501,7 +573,6 @@ export abstract class CircuitElement {
     this.ty = y;
   }
 
-
   /**
    * Function to move/transform an element
    * @param fdx relative x position to move
@@ -522,7 +593,6 @@ export abstract class CircuitElement {
     this.tx += fdx;
     this.ty += fdy;
   }
-
   /**
    * Return the Property of the Circuit Component
    * @returns Object containing component name,id and the html required to be shown on property box
